@@ -1,0 +1,141 @@
+---
+description: Java 25 and Spring Boot best practices for the Nexus project
+alwaysApply: true
+---
+
+# Spring Boot / Java 25 — Nexus
+
+Apply these conventions on every change to this Spring Boot service.
+
+## Language and naming
+
+- Write **all** class, interface, method, field, parameter, and local variable names in **English** (camelCase / PascalCase).
+- Package folders may keep the existing Spanish package names (`controlador`, `entidad`, `repositorio`, `servicio`).
+- Prefer clear verbs for methods: `findById`, `save`, `deleteById`, `listAll`.
+- Avoid Spanish identifiers in new or refactored code (`guardar` → `save`, `listarTodos` → `listAll`).
+
+## Java 25 practices
+
+- Target modern Java idioms compatible with Java 25 (records, sealed types, pattern matching, `var` only when the type is obvious).
+- Prefer constructor injection; avoid field `@Autowired`.
+- Use `Optional` for nullable lookups; do not return `null` from service APIs when an `Optional` or exception is clearer.
+- Prefer immutable DTOs and unmodifiable collections at API boundaries.
+- Use `java.time` (`LocalDate`, `LocalDateTime`, `Instant`); never `java.util.Date`.
+- Prefer `switch` expressions / pattern matching over long if-else chains when appropriate.
+- Keep methods focused; extract private helpers for complex logic.
+- Mark read-only service methods with `@Transactional(readOnly = true)`.
+
+## Javadoc (required)
+
+- Every **public** method (and public type) must have up-to-date Javadoc: purpose, `@param`, `@return`, `@throws` when relevant.
+- Update Javadoc whenever signature or behavior changes.
+- Interface methods and their implementations must stay documented (document on the interface; implementations may use `{@inheritDoc}`).
+
+```java
+/**
+ * Finds a client by document number and type.
+ *
+ * @param documentNumber the client document number
+ * @param documentType the document type
+ * @return an Optional containing the client if found
+ */
+Optional<Client> findByDocumentNumberAndType(String documentNumber, String documentType);
+```
+
+## DTOs
+
+- Define DTOs as **Java records** in `com.nexus.nexus.dto`.
+- Name them `*Dto` or `*Response` / `*Request` (English), e.g. `ClientReservationDto`.
+- Do not expose JPA entities directly in REST JSON responses when a DTO is more appropriate.
+- Validate request DTOs with Bean Validation (`@NotNull`, `@NotBlank`, etc.) at controller boundaries when applicable.
+
+```java
+public record ClientReservationDto(
+    Long clientId,
+    String clientFirstName,
+    String destination,
+    LocalDate tripStartDate
+) {}
+```
+
+## Layering (follow existing packages)
+
+| Layer | Package | Responsibility |
+|-------|---------|----------------|
+| Controllers | `com.nexus.nexus.controlador` | HTTP / MVC; no business rules or persistence |
+| DTOs | `com.nexus.nexus.dto` | Records for transfer only |
+| Entities | `com.nexus.nexus.modelo.entidad` | JPA entities |
+| Repositories | `com.nexus.nexus.modelo.repositorio` | Spring Data JPA interfaces |
+| Services | `com.nexus.nexus.modelo.servicio` | Business logic; `I*` interfaces + implementations |
+| Config | `com.nexus.nexus.config` | WebMvc, interceptors, beans |
+
+- Controllers depend on service interfaces, not repositories.
+- Services depend on repositories; keep transactions at the service layer.
+- Repositories stay thin (queries only).
+
+## Spring Boot conventions
+
+- Annotate services with `@Service`, repositories with Spring Data, controllers with `@Controller` / `@RestController` as appropriate.
+- Use `@Valid` on request bodies/forms that carry constraints.
+- Prefer constructor injection:
+
+```java
+@Service
+public class ClientService implements IClientService {
+
+    private final ClientRepository clientRepository;
+
+    public ClientService(ClientRepository clientRepository) {
+        this.clientRepository = clientRepository;
+    }
+}
+```
+
+- Do not log secrets or credentials; keep `application.properties` sensitive values externalized when possible.
+- Match existing Thymeleaf template folders when adding MVC views.
+
+## Testing
+
+- Place tests under `src/test/java/com/nexus/nexus/`.
+- Prefer meaningful unit tests for services; use `@SpringBootTest` / slice tests when integration is needed.
+- Name test methods in English describing behavior.
+
+## Project structure (current)
+
+```
+Nexus-main/
+├── BDD/
+├── pom.xml                          # Spring Boot 3.4.x, PostgreSQL, JPA, Thymeleaf, Mail, PDFBox, CSV
+├── src/main/java/com/nexus/nexus/
+│   ├── NexusApplication.java
+│   ├── config/
+│   │   └── WebMvcConfig.java
+│   ├── controlador/
+│   │   ├── AuthInterceptor.java
+│   │   ├── ClienteControlador.java
+│   │   ├── EmailTestController.java
+│   │   ├── IndexControlador.java
+│   │   ├── LoginController.java
+│   │   ├── PagoControlador.java
+│   │   ├── PilotoControlador.java
+│   │   ├── ReporteApiController.java
+│   │   ├── ReporteControlador.java
+│   │   ├── ReservaControlador.java
+│   │   ├── UsuarioControlador.java
+│   │   ├── ViajeControlador.java
+│   │   └── VueloControlador.java
+│   ├── dto/
+│   │   └── ClienteReservaDTO.java   # migrate new/changed DTOs to records
+│   └── modelo/
+│       ├── entidad/                 # Cliente, Pago, Piloto, Reserva, TipoReporte, Usuario, Viaje, Vuelo
+│       ├── repositorio/             # *Repositorio (Spring Data JPA)
+│       └── servicio/                # I*Servicio + implementations (*Servicio / *ServicioImpl)
+├── src/main/resources/
+│   ├── application.properties
+│   ├── static/css, static/images/
+│   └── templates/                   # email, layout, pago, piloto, reporte, reserva, usuario, viaje, vista, vuelo
+└── src/test/java/com/nexus/nexus/
+    └── NexusApplicationTests.java
+```
+
+When adding features, place files in the matching package above and keep English identifiers + Javadoc + record DTOs.
